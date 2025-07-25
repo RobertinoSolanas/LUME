@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LUME – Germany OpenStreetMap Viewer</title>
+    <title>LUME – Germany OpenStreetMap Viewer</title>
 
     <!-- Leaflet CSS (open‑source) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 
-    <!-- Custom styles -->
     <style>
         :root {
             --accent: #1abc9c;
@@ -16,274 +15,67 @@
             --shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
             --radius: 0.75rem;
         }
-
-        html,
-        body {
-            height: 100%;
-            margin: 0;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #f5f7f8;
-        }
-
-        #map {
-            height: 100%;
-            width: 100%;
-            outline: none;
-        }
-
-        /* Floating controls */
-        #controls,
-        #info {
-            position: absolute;
-            top: 10px;
-            z-index: 1000;
-            background: var(--bg-panel);
-            padding: 0.75rem 1rem;
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-        }
-
-        #controls {
-            left: 10px;
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        #info {
-            right: 10px;
-            width: 260px;
-            max-height: 90%;
-            overflow: auto;
-        }
-
-        /* Inputs */
-        input[type="text"] {
-            flex: 1;
-            padding: 0.4rem 0.6rem;
-            border: 1px solid #ccc;
-            border-radius: var(--radius);
-            font-size: 0.9rem;
-        }
-
-        button {
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            padding: 0.45rem 0.8rem;
-            border-radius: var(--radius);
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        button:hover,
-        button:focus {
-            opacity: 0.85;
-        }
-
-        h3,
-        h4 {
-            margin: 0.4rem 0 0.6rem;
-            font-weight: 600;
-            color: #333;
-        }
-
-        ul {
-            margin: 0;
-            padding-left: 1.1rem;
-        }
-
-        li {
-            margin-bottom: 0.35rem;
-            font-size: 0.85rem;
-        }
-
-        /* POI list buttons */
-        #poiList button {
-            background: none;
-            border: none;
-            padding: 0;
-            font: inherit;
-            text-align: left;
-            cursor: pointer;
-            color: inherit;
-        }
-        #poiList button:hover {
-            color: var(--accent);
-            text-decoration: underline;
-        }
-
-        a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
+        html, body {height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f5f7f8;}
+        #map{height:100%;width:100%;outline:none;}
+        #controls,#info{position:absolute;top:10px;z-index:1000;background:var(--bg-panel);padding:0.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);}        
+        #controls{left:10px;display:flex;gap:0.5rem;align-items:center;}
+        #info{right:10px;width:300px;max-height:90%;overflow:auto;}
+        input[type=text]{flex:1;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:0.9rem;}
+        button{background:var(--accent);color:#fff;border:none;padding:0.45rem 0.8rem;border-radius:var(--radius);font-size:0.9rem;cursor:pointer;transition:opacity .2s;}
+        button:hover,button:focus{opacity:.85;}
+        h3,h4{margin:0.4rem 0 0.6rem;font-weight:600;color:#333;}
+        ul{margin:0;padding-left:1.1rem;}li{margin-bottom:0.35rem;font-size:0.85rem;}
+        #poiList button{background:none;border:none;padding:0;font:inherit;text-align:left;cursor:pointer;color:inherit;}#poiList button:hover{color:var(--accent);text-decoration:underline;}
+        #descBox{border-top:1px solid #eee;margin-top:0.6rem;padding-top:0.4rem;}
+        #speakBtn{background:none;color:var(--accent);padding:0;margin-right:0.4rem;font-size:1rem;line-height:1;cursor:pointer;}#speakBtn:hover{opacity:.7;}
+        a{color:var(--accent);text-decoration:none;}a:hover{text-decoration:underline;}
     </style>
 </head>
 <body>
-    <!-- Search controls -->
     <form id="controls" aria-label="Search places" onsubmit="return false;">
-        <input
-            type="text"
-            id="search"
-            placeholder="Search location in Germany"
-            aria-label="Search location in Germany"
-            autocomplete="off"
-        />
+        <input id="search" type="text" placeholder="Search location in Germany" aria-label="Search location in Germany" autocomplete="off" />
         <button id="searchBtn" aria-label="Execute search">Go</button>
     </form>
 
-    <!-- Info panel -->
     <aside id="info" aria-live="polite">
         <h3>Location info</h3>
         <p id="coords">Click on the map …</p>
-        <div id="gpxBox" style="display: none; margin-bottom: 0.5rem;">
-            <a id="gpxLink" download="location.gpx">Download GPX</a>
-        </div>
-        <div id="poiBox">
-            <h4>POIs nearby</h4>
-            <ul id="poiList"></ul>
-        </div>
+        <div id="gpxBox" style="display:none;margin-bottom:0.5rem;"><a id="gpxLink" download="location.gpx">Download GPX</a></div>
+        <div id="poiBox"><h4>POIs nearby</h4><ul id="poiList"></ul></div>
+        <div id="descBox" style="display:none;"><button id="speakBtn" aria-label="Play description">🔊</button><strong>Description</strong><p id="description" style="margin:0.3rem 0 0;font-size:0.85rem;"></p></div>
     </aside>
 
-    <!-- Map container -->
     <div id="map" tabindex="0" role="region" aria-label="Map of Germany"></div>
 
-    <!-- Leaflet JS (open‑source) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
-    <!-- LUME map logic -->
     <script>
-        /* ------------------------------------------------------------------
-         * LUME – OpenStreetMap for Germany (runs fully from file:///)
-         * Author: ChatGPT – open‑source only
-         * ------------------------------------------------------------------*/
+    /* ------------------------------------------------------------------
+     * Core LUME map logic (no voice) – will call lumeVoice helper
+     * ------------------------------------------------------------------*/
+    const map = L.map("map", {keyboard:true}).setView([51.1657,10.4515],6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors",maxZoom:19}).addTo(map);
 
-        // Initialise Leaflet map
-        const map = L.map("map", { keyboard: true }).setView([51.1657, 10.4515], 6); // Germany centroid
+    let marker;let currentDescription="";
+    function speak(text){if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang="de-DE";window.speechSynthesis.speak(u);} // fallback manual
+    document.getElementById("speakBtn").addEventListener("click",()=>{if(currentDescription)speak(currentDescription);});
 
-        // Base layer (OpenStreetMap Standard)
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "&copy; OpenStreetMap contributors",
-            maxZoom: 19,
-        }).addTo(map);
+    function setMarker(lat,lon,label="Selected point"){if(marker)map.removeLayer(marker);marker=L.marker([lat,lon]).addTo(map).bindPopup(label).openPopup();map.setView([lat,lon],16);updateInfo(lat,lon,label);}    
 
-        let marker; // active marker reference
+    function updateInfo(lat,lon,label){document.getElementById("coords").textContent=`${label}: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        const gpx=`<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="LUME">\n  <wpt lat="${lat}" lon="${lon}">\n    <name>${label}</name>\n    <time>${new Date().toISOString()}</time>\n  </wpt>\n</gpx>`;const blob=new Blob([gpx],{type:"application/gpx+xml"});document.getElementById("gpxLink").href=URL.createObjectURL(blob);document.getElementById("gpxBox").style.display="block";document.getElementById("descBox").style.display="none";currentDescription="";fetchPOIs(lat,lon);}    
 
-        /**
-         * Places a marker, centres the view, and updates the sidebar.
-         * @param {number} lat
-         * @param {number} lon
-         * @param {string} label
-         */
-        function setMarker(lat, lon, label = "Selected point") {
-            if (marker) map.removeLayer(marker);
-            marker = L.marker([lat, lon]).addTo(map).bindPopup(label).openPopup();
-            map.setView([lat, lon], 16);
-            updateInfo(lat, lon, label);
-        }
+    async function fetchPOIs(lat,lon){const radius=300;const query=`[out:json][timeout:25];(node(around:${radius},${lat},${lon})["name"];way(around:${radius},${lat},${lon})["name"];);out center 20;`;const url="https://overpass-api.de/api/interpreter?data="+encodeURIComponent(query);const poiList=document.getElementById("poiList");poiList.innerHTML="<li>Loading…</li>";try{const resp=await fetch(url);const data=await resp.json();poiList.innerHTML="";if(data.elements.length===0){poiList.innerHTML="<li>No POIs found.</li>";return;}data.elements.forEach(el=>{const latPoi=el.lat??el.center?.lat;const lonPoi=el.lon??el.center?.lon;if(latPoi==null||lonPoi==null)return;const type=el.tags.amenity||el.tags.shop||el.tags.tourism||el.tags.highway||"poi";const li=document.createElement("li");const btn=document.createElement("button");btn.textContent=`${el.tags.name} (${type})`;btn.setAttribute("aria-label",`Zoom to ${el.tags.name}`);btn.addEventListener("click",()=>{setMarker(latPoi,lonPoi,el.tags.name);describePOI(el.tags.name);});li.appendChild(btn);poiList.appendChild(li);});}catch(e){poiList.innerHTML="<li>Error fetching POIs.</li>";}}
 
-        /**
-         * Updates coordinate read‑out, generates a GPX download, and fetches POIs.
-         */
-        function updateInfo(lat, lon, label) {
-            document.getElementById("coords").textContent = `${label}: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    function describePOI(name){document.getElementById("description").textContent="Loading description …";document.getElementById("descBox").style.display="block";lumeVoice.describe(name,{autoplay:false,onResult:(text)=>{currentDescription=text;document.getElementById("description").textContent=text;},onError:()=>{currentDescription="";document.getElementById("description").textContent="No Wikipedia description found.";}});}    
 
-            // GPX generation
-            const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="LUME">\n  <wpt lat="${lat}" lon="${lon}">\n    <name>${label}</name>\n    <time>${new Date().toISOString()}</time>\n  </wpt>\n</gpx>`;
-            const blob = new Blob([gpx], { type: "application/gpx+xml" });
-            const url = URL.createObjectURL(blob);
-            const link = document.getElementById("gpxLink");
-            link.href = url;
-            document.getElementById("gpxBox").style.display = "block";
-
-            // Fetch POIs
-            fetchPOIs(lat, lon);
-        }
-
-        /**
-         * Query Overpass API for nearby named features and make them clickable.
-         */
-        async function fetchPOIs(lat, lon) {
-            const radius = 300; // metres
-
-            const query = `[out:json][timeout:25];\n(\n  node(around:${radius},${lat},${lon})["name"];\n  way(around:${radius},${lat},${lon})["name"];\n);\nout center 15;`; // include centre coords for ways
-
-            const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
-            const poiList = document.getElementById("poiList");
-            poiList.innerHTML = "<li>Loading…</li>";
-
-            try {
-                const resp = await fetch(url);
-                const data = await resp.json();
-
-                poiList.innerHTML = "";
-                if (data.elements.length === 0) {
-                    poiList.innerHTML = "<li>No POIs found.</li>";
-                    return;
-                }
-
-                data.elements.forEach((el) => {
-                    const latPoi = el.lat ?? el.center?.lat;
-                    const lonPoi = el.lon ?? el.center?.lon;
-                    if (latPoi == null || lonPoi == null) return; // skip if no coords
-
-                    const type = el.tags.amenity || el.tags.shop || el.tags.tourism || el.tags.highway || "poi";
-                    const li = document.createElement("li");
-                    const btn = document.createElement("button");
-                    btn.textContent = `${el.tags.name} (${type})`;
-                    btn.setAttribute("aria-label", `Zoom to ${el.tags.name}`);
-                    btn.addEventListener("click", () => setMarker(latPoi, lonPoi, el.tags.name));
-                    li.appendChild(btn);
-                    poiList.appendChild(li);
-                });
-            } catch (err) {
-                poiList.innerHTML = "<li>Error fetching POIs.</li>";
-            }
-        }
-
-        /**
-         * Nominatim geocoding (Germany‑only).
-         */
-        async function geocode(query) {
-            const url =
-                "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q=" +
-                encodeURIComponent(query);
-            const resp = await fetch(url, { headers: { "Referer": "file://" } }); // allowed header
-            return resp.json();
-        }
-
-        // Search form actions
-        const searchInput = document.getElementById("search");
-        document.getElementById("searchBtn").addEventListener("click", async () => {
-            const q = searchInput.value.trim();
-            if (!q) return;
-            try {
-                const results = await geocode(q);
-                if (results.length === 0) {
-                    alert("No results. Try a different query.");
-                    return;
-                }
-                const r = results[0];
-                setMarker(parseFloat(r.lat), parseFloat(r.lon), r.display_name);
-            } catch {
-                alert("Search error. Please try again.");
-            }
-        });
-
-        // Enter key triggers search
-        searchInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") document.getElementById("searchBtn").click();
-        });
-
-        // Map click handler
-        map.on("click", (e) => {
-            setMarker(e.latlng.lat, e.latlng.lng, "Clicked point");
-        });
+    async function geocode(q){const url="https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q="+encodeURIComponent(q);const r=await fetch(url,{headers:{Referer:"file://"}});return r.json();}
+    const searchInput=document.getElementById("search");document.getElementById("searchBtn").addEventListener("click",async()=>{const q=searchInput.value.trim();if(!q)return;try{const res=await geocode(q);if(res.length===0){alert("No results. Try a different query.");return;}const r=res[0];setMarker(parseFloat(r.lat),parseFloat(r.lon),r.display_name);}catch{alert("Search error. Please try again.");}});
+    searchInput.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("searchBtn").click();});
+    map.on("click",e=>{setMarker(e.latlng.lat,e.latlng.lng,"Clicked point");});
     </script>
+
+    <!-- Step 2: add voice helper AFTER main map script -->
+    <script src="lume-voice.js"></script>
 </body>
 </html>
