@@ -6,12 +6,7 @@
     <title>LUME – Germany OpenStreetMap Viewer</title>
 
     <!-- Leaflet CSS (open‑source) -->
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        
-        crossorigin=""
-    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 
     <!-- Custom styles -->
     <style>
@@ -104,6 +99,21 @@
             font-size: 0.85rem;
         }
 
+        /* POI list buttons */
+        #poiList button {
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+            color: inherit;
+        }
+        #poiList button:hover {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
         a {
             color: var(--accent);
             text-decoration: none;
@@ -144,11 +154,7 @@
     <div id="map" tabindex="0" role="region" aria-label="Map of Germany"></div>
 
     <!-- Leaflet JS (open‑source) -->
-    <script
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        
-        crossorigin=""
-    ></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
     <!-- LUME map logic -->
     <script>
@@ -177,7 +183,7 @@
         function setMarker(lat, lon, label = "Selected point") {
             if (marker) map.removeLayer(marker);
             marker = L.marker([lat, lon]).addTo(map).bindPopup(label).openPopup();
-            map.setView([lat, lon], 14);
+            map.setView([lat, lon], 16);
             updateInfo(lat, lon, label);
         }
 
@@ -200,12 +206,12 @@
         }
 
         /**
-         * Query Overpass API for nearby named features.
+         * Query Overpass API for nearby named features and make them clickable.
          */
         async function fetchPOIs(lat, lon) {
             const radius = 300; // metres
 
-            const query = `[out:json][timeout:25];\n(\n  node(around:${radius},${lat},${lon})["name"];\n  way(around:${radius},${lat},${lon})["name"];\n);\nout body 15;`; // return up to 15 objects
+            const query = `[out:json][timeout:25];\n(\n  node(around:${radius},${lat},${lon})["name"];\n  way(around:${radius},${lat},${lon})["name"];\n);\nout center 15;`; // include centre coords for ways
 
             const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
             const poiList = document.getElementById("poiList");
@@ -221,10 +227,18 @@
                     return;
                 }
 
-                data.elements.slice(0, 15).forEach((el) => {
-                    const li = document.createElement("li");
+                data.elements.forEach((el) => {
+                    const latPoi = el.lat ?? el.center?.lat;
+                    const lonPoi = el.lon ?? el.center?.lon;
+                    if (latPoi == null || lonPoi == null) return; // skip if no coords
+
                     const type = el.tags.amenity || el.tags.shop || el.tags.tourism || el.tags.highway || "poi";
-                    li.textContent = `${el.tags.name} (${type})`;
+                    const li = document.createElement("li");
+                    const btn = document.createElement("button");
+                    btn.textContent = `${el.tags.name} (${type})`;
+                    btn.setAttribute("aria-label", `Zoom to ${el.tags.name}`);
+                    btn.addEventListener("click", () => setMarker(latPoi, lonPoi, el.tags.name));
+                    li.appendChild(btn);
                     poiList.appendChild(li);
                 });
             } catch (err) {
@@ -239,7 +253,7 @@
             const url =
                 "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q=" +
                 encodeURIComponent(query);
-            const resp = await fetch(url, { headers: { "Referer": "file://" } }); // polite header within allowed CORS
+            const resp = await fetch(url, { headers: { "Referer": "file://" } }); // allowed header
             return resp.json();
         }
 
