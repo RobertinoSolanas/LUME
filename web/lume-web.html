@@ -1,81 +1,334 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LUME – Germany OpenStreetMap Viewer</title>
-
-    <!-- Leaflet CSS (open‑source) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-
+    <title>LUME – Germany OSM + Routing</title>
+    <!-- Leaflet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
     <style>
-        :root {
-            --accent: #1abc9c;
-            --bg-panel: #ffffff;
-            --shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-            --radius: 0.75rem;
-        }
-        html, body {height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f5f7f8;}
-        #map{height:100%;width:100%;outline:none;}
-        #controls,#info{position:absolute;top:10px;z-index:1000;background:var(--bg-panel);padding:0.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);}        
-        #controls{left:10px;display:flex;gap:0.5rem;align-items:center;}
-        #info{right:10px;width:300px;max-height:90%;overflow:auto;}
-        input[type=text]{flex:1;padding:0.4rem 0.6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:0.9rem;}
-        button{background:var(--accent);color:#fff;border:none;padding:0.45rem 0.8rem;border-radius:var(--radius);font-size:0.9rem;cursor:pointer;transition:opacity .2s;}
-        button:hover,button:focus{opacity:.85;}
-        h3,h4{margin:0.4rem 0 0.6rem;font-weight:600;color:#333;}
-        ul{margin:0;padding-left:1.1rem;}li{margin-bottom:0.35rem;font-size:0.85rem;}
-        #poiList button{background:none;border:none;padding:0;font:inherit;text-align:left;cursor:pointer;color:inherit;}#poiList button:hover{color:var(--accent);text-decoration:underline;}
-        #descBox{border-top:1px solid #eee;margin-top:0.6rem;padding-top:0.4rem;}
-        #speakBtn{background:none;color:var(--accent);padding:0;margin-right:0.4rem;font-size:1rem;line-height:1;cursor:pointer;}#speakBtn:hover{opacity:.7;}
-        a{color:var(--accent);text-decoration:none;}a:hover{text-decoration:underline;}
+      :root {
+        --accent: #1abc9c;
+        --bg: #ffffff;
+        --radius: 0.75rem;
+        --shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+          sans-serif;
+        background: #f5f7f8;
+      }
+      #map {
+        height: 100%;
+        width: 100%;
+      }
+      #controls,
+      #info {
+        position: absolute;
+        top: 10px;
+        z-index: 1000;
+        background: var(--bg);
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+      #controls {
+        left: 10px;
+        display: grid;
+        gap: 0.4rem;
+        grid-template-columns: 1fr 1fr auto;
+        width: 420px;
+      }
+      #info {
+        right: 10px;
+        width: 320px;
+        max-height: 90%;
+        overflow: auto;
+      }
+      input[type="text"] {
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #ccc;
+        border-radius: var(--radius);
+        font-size: 0.9rem;
+      }
+      button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        padding: 0.45rem 0.7rem;
+        border-radius: var(--radius);
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      button:hover {
+        opacity: 0.85;
+      }
+      h4 {
+        margin: 0.5rem 0 0.3rem;
+      }
+      ul {
+        margin: 0;
+        padding-left: 1rem;
+      }
+      li {
+        margin-bottom: 0.3rem;
+        font-size: 0.85rem;
+      }
+      #routeSteps li {
+        list-style: decimal;
+      }
+      #poiList button,
+      #routeSteps button {
+        background: none;
+        border: none;
+        font: inherit;
+        text-align: left;
+        color: inherit;
+        cursor: pointer;
+      }
+      #poiList button:hover,
+      #routeSteps button:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+      #playRouteBtn {
+        background: none;
+        color: var(--accent);
+        font-size: 1.1rem;
+        padding: 0 0.2rem;
+        cursor: pointer;
+      }
     </style>
-</head>
-<body>
-    <form id="controls" aria-label="Search places" onsubmit="return false;">
-        <input id="search" type="text" placeholder="Search location in Germany" aria-label="Search location in Germany" autocomplete="off" />
-        <button id="searchBtn" aria-label="Execute search">Go</button>
+  </head>
+  <body>
+    <!-- Controls -->
+    <form id="controls" aria-label="Routing search" onsubmit="return false;">
+      <input id="start" type="text" placeholder="Start" />
+      <input id="end" type="text" placeholder="Destination" />
+      <button id="routeBtn">Route</button>
     </form>
 
-    <aside id="info" aria-live="polite">
-        <h3>Location info</h3>
-        <p id="coords">Click on the map …</p>
-        <div id="gpxBox" style="display:none;margin-bottom:0.5rem;"><a id="gpxLink" download="location.gpx">Download GPX</a></div>
-        <div id="poiBox"><h4>POIs nearby</h4><ul id="poiList"></ul></div>
-        <div id="descBox" style="display:none;"><button id="speakBtn" aria-label="Play description">🔊</button><strong>Description</strong><p id="description" style="margin:0.3rem 0 0;font-size:0.85rem;"></p></div>
+    <!-- Sidebar -->
+    <aside id="info">
+      <h3>Information</h3>
+      <p id="coords">Select or search positions…</p>
+
+      <!-- POIs -->
+      <div id="poiBox">
+        <h4>POIs nearby</h4>
+        <ul id="poiList"></ul>
+      </div>
+
+      <!-- Wikipedia description -->
+      <div id="descBox" style="display:none">
+        <button id="speakBtn" aria-label="Speak description">🔊</button>
+        <strong>Description</strong>
+        <p id="description"></p>
+      </div>
+
+      <!-- Routing steps -->
+      <div id="routeBox" style="display:none; border-top:1px solid #eee; margin-top:0.6rem; padding-top:0.4rem;">
+        <button id="playRouteBtn" aria-label="Speak route">🔊</button>
+        <strong>Route instructions</strong>
+        <ul id="routeSteps"></ul>
+      </div>
     </aside>
 
-    <div id="map" tabindex="0" role="region" aria-label="Map of Germany"></div>
+    <!-- Map -->
+    <div id="map" aria-label="Map of Germany"></div>
 
+    <!-- Libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
+    <!-- Main script -->
     <script>
-    /* ------------------------------------------------------------------
-     * Core LUME map logic (no voice) – will call lumeVoice helper
-     * ------------------------------------------------------------------*/
-    const map = L.map("map", {keyboard:true}).setView([51.1657,10.4515],6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors",maxZoom:19}).addTo(map);
+      const map = L.map("map", { keyboard: true }).setView([51.1657, 10.4515], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map);
 
-    let marker;let currentDescription="";
-    function speak(text){if(!("speechSynthesis"in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang="de-DE";window.speechSynthesis.speak(u);} // fallback manual
-    document.getElementById("speakBtn").addEventListener("click",()=>{if(currentDescription)speak(currentDescription);});
+      // Globals
+      let markerStart, markerEnd, poiMarker, routeLine;
+      let currentDescription = "";
+      let currentRouteText = "";
 
-    function setMarker(lat,lon,label="Selected point"){if(marker)map.removeLayer(marker);marker=L.marker([lat,lon]).addTo(map).bindPopup(label).openPopup();map.setView([lat,lon],16);updateInfo(lat,lon,label);}    
+      // Util speech
+      function speak(text, lang = "de-DE") {
+        if (!("speechSynthesis" in window)) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang;
+        window.speechSynthesis.speak(u);
+      }
+      document.getElementById("speakBtn").addEventListener("click", () => {
+        if (currentDescription) speak(currentDescription);
+      });
+      document.getElementById("playRouteBtn").addEventListener("click", () => {
+        if (currentRouteText) speak(currentRouteText);
+      });
 
-    function updateInfo(lat,lon,label){document.getElementById("coords").textContent=`${label}: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-        const gpx=`<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="LUME">\n  <wpt lat="${lat}" lon="${lon}">\n    <name>${label}</name>\n    <time>${new Date().toISOString()}</time>\n  </wpt>\n</gpx>`;const blob=new Blob([gpx],{type:"application/gpx+xml"});document.getElementById("gpxLink").href=URL.createObjectURL(blob);document.getElementById("gpxBox").style.display="block";document.getElementById("descBox").style.display="none";currentDescription="";fetchPOIs(lat,lon);}    
+      // Geocode via Nominatim
+      async function geocode(query) {
+        const url =
+          "https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q=" +
+          encodeURIComponent(query);
+        const r = await fetch(url, { headers: { Referer: "file://" } });
+        return r.json();
+      }
 
-    async function fetchPOIs(lat,lon){const radius=300;const query=`[out:json][timeout:25];(node(around:${radius},${lat},${lon})["name"];way(around:${radius},${lat},${lon})["name"];);out center 20;`;const url="https://overpass-api.de/api/interpreter?data="+encodeURIComponent(query);const poiList=document.getElementById("poiList");poiList.innerHTML="<li>Loading…</li>";try{const resp=await fetch(url);const data=await resp.json();poiList.innerHTML="";if(data.elements.length===0){poiList.innerHTML="<li>No POIs found.</li>";return;}data.elements.forEach(el=>{const latPoi=el.lat??el.center?.lat;const lonPoi=el.lon??el.center?.lon;if(latPoi==null||lonPoi==null)return;const type=el.tags.amenity||el.tags.shop||el.tags.tourism||el.tags.highway||"poi";const li=document.createElement("li");const btn=document.createElement("button");btn.textContent=`${el.tags.name} (${type})`;btn.setAttribute("aria-label",`Zoom to ${el.tags.name}`);btn.addEventListener("click",()=>{setMarker(latPoi,lonPoi,el.tags.name);describePOI(el.tags.name);});li.appendChild(btn);poiList.appendChild(li);});}catch(e){poiList.innerHTML="<li>Error fetching POIs.</li>";}}
+      // Route fetch via OSRM
+      async function route(startLat, startLon, endLat, endLon) {
+        const url = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson&steps=true`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error("Route fetch failed");
+        return r.json();
+      }
 
-    function describePOI(name){document.getElementById("description").textContent="Loading description …";document.getElementById("descBox").style.display="block";lumeVoice.describe(name,{autoplay:false,onResult:(text)=>{currentDescription=text;document.getElementById("description").textContent=text;},onError:()=>{currentDescription="";document.getElementById("description").textContent="No Wikipedia description found.";}});}    
+      // Update POIs for a point
+      async function fetchPOIs(lat, lon) {
+        const radius = 300;
+        const query = `[out:json][timeout:25];(node(around:${radius},${lat},${lon})["name"];way(around:${radius},${lat},${lon})["name"];);out center 15;`;
+        const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+        const list = document.getElementById("poiList");
+        list.innerHTML = "<li>Loading…</li>";
+        try {
+          const resp = await fetch(url);
+          const data = await resp.json();
+          list.innerHTML = "";
+          if (data.elements.length === 0) {
+            list.innerHTML = "<li>No POIs.</li>";
+            return;
+          }
+          data.elements.forEach((el) => {
+            const latPoi = el.lat ?? el.center?.lat;
+            const lonPoi = el.lon ?? el.center?.lon;
+            if (!latPoi || !lonPoi) return;
+            const type =
+              el.tags.amenity || el.tags.shop || el.tags.tourism || el.tags.highway || "poi";
+            const li = document.createElement("li");
+            const btn = document.createElement("button");
+            btn.textContent = `${el.tags.name} (${type})`;
+            btn.addEventListener("click", () => {
+              map.setView([latPoi, lonPoi], 18);
+              if (poiMarker) map.removeLayer(poiMarker);
+              poiMarker = L.marker([latPoi, lonPoi]).addTo(map);
+              lumeVoice.describe(el.tags.name, {
+                autoplay: false,
+                onResult: (text) => {
+                  currentDescription = text;
+                  document.getElementById("description").textContent = text;
+                  document.getElementById("descBox").style.display = "block";
+                  speak(text);
+                },
+              });
+            });
+            li.appendChild(btn);
+            list.appendChild(li);
+          });
+        } catch {
+          list.innerHTML = "<li>Error fetching POIs.</li>";
+        }
+      }
 
-    async function geocode(q){const url="https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q="+encodeURIComponent(q);const r=await fetch(url,{headers:{Referer:"file://"}});return r.json();}
-    const searchInput=document.getElementById("search");document.getElementById("searchBtn").addEventListener("click",async()=>{const q=searchInput.value.trim();if(!q)return;try{const res=await geocode(q);if(res.length===0){alert("No results. Try a different query.");return;}const r=res[0];setMarker(parseFloat(r.lat),parseFloat(r.lon),r.display_name);}catch{alert("Search error. Please try again.");}});
-    searchInput.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("searchBtn").click();});
-    map.on("click",e=>{setMarker(e.latlng.lat,e.latlng.lng,"Clicked point");});
+      // Handle map click to set start or end if empty
+      map.on("click", (e) => {
+        const { lat, lng } = e.latlng;
+        const startInput = document.getElementById("start");
+        const endInput = document.getElementById("end");
+        if (!startInput.value) {
+          startInput.value = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+          if (markerStart) map.removeLayer(markerStart);
+          markerStart = L.marker([lat, lng]).addTo(map);
+        } else if (!endInput.value) {
+          endInput.value = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+          if (markerEnd) map.removeLayer(markerEnd);
+          markerEnd = L.marker([lat, lng]).addTo(map);
+        } else {
+          // reset both
+          startInput.value = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+          if (markerStart) map.removeLayer(markerStart);
+          if (markerEnd) map.removeLayer(markerEnd);
+          markerStart = L.marker([lat, lng]).addTo(map);
+          endInput.value = "";
+        }
+      });
+
+      // Fetch POIs when map moves
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        fetchPOIs(c.lat, c.lng);
+      });
+
+      // Routing button
+      document.getElementById("routeBtn").addEventListener("click", async () => {
+        const startVal = document.getElementById("start").value.trim();
+        const endVal = document.getElementById("end").value.trim();
+        if (!startVal || !endVal) {
+          alert("Please enter start and destination.");
+          return;
+        }
+
+        // Obtain coordinates (either lat,lon or address)
+        async function toCoords(val) {
+          if (/^-?\d+\.\d+,-?\d+\.\d+$/.test(val)) {
+            const [lat, lon] = val.split(",").map(parseFloat);
+            return { lat, lon };
+          }
+          const res = await geocode(val);
+          if (res.length === 0) throw new Error("Geocode failure");
+          return { lat: parseFloat(res[0].lat), lon: parseFloat(res[0].lon) };
+        }
+
+        try {
+          const s = await toCoords(startVal);
+          const t = await toCoords(endVal);
+
+          // markers
+          if (markerStart) map.removeLayer(markerStart);
+          if (markerEnd) map.removeLayer(markerEnd);
+          markerStart = L.marker([s.lat, s.lon]).addTo(map);
+          markerEnd = L.marker([t.lat, t.lon]).addTo(map);
+
+          // route fetch
+          const data = await route(s.lat, s.lon, t.lat, t.lon);
+          const routeGeo = data.routes[0].geometry;
+          const steps = data.routes[0].legs[0].steps;
+
+          if (routeLine) map.removeLayer(routeLine);
+          routeLine = L.geoJSON(routeGeo, { color: "#0066ff" }).addTo(map);
+          map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+
+          // list steps
+          const ul = document.getElementById("routeSteps");
+          ul.innerHTML = "";
+          const texts = [];
+          steps.forEach((st, idx) => {
+            const li = document.createElement("li");
+            const text = st.maneuver?.instruction || st.name || "Continue";
+            li.textContent = text;
+            ul.appendChild(li);
+            texts.push(`${idx + 1}. ${text}`);
+          });
+          currentRouteText = texts.join(". ");
+          document.getElementById("routeBox").style.display = "block";
+          speak("Route ready. " + texts.slice(0, 3).join(". ")); // teaser
+        } catch (err) {
+          console.warn(err);
+          alert("Routing failed. Please check inputs.");
+        }
+      });
     </script>
 
-    <!-- Step 2: add voice helper AFTER main map script -->
+    <!-- Voice helper -->
     <script src="lume-voice.js"></script>
-</body>
+  </body>
 </html>
