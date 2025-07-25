@@ -3,22 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LUME – Bike Navigation (Animated)</title>
+  <title>LUME – Bike Navigation (Fast + POI every 10 km)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
   <style>
     :root { --accent:#1abc9c; --bg:#fff; --radius:.75rem; --shadow:0 2px 6px rgba(0,0,0,.15);}  
     html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f5f7f8;}
     #map{height:100%;width:100%;}
-    #controls,#info{position:absolute;top:10px;z-index:1000;background:var(--bg);padding:0.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);}  
-    #controls{left:10px;display:grid;gap:.4rem;grid-template-columns:1fr 1fr auto auto;width:480px;align-items:center;}
-    #info{right:10px;width:320px;max-height:90%;overflow:auto;}
+    #controls{position:absolute;top:10px;left:10px;z-index:1000;background:var(--bg);padding:.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);display:grid;gap:.4rem;grid-template-columns:1fr 1fr auto auto;width:480px;align-items:center;}
+    #info{position:absolute;top:10px;right:10px;z-index:1000;background:var(--bg);padding:.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);width:320px;max-height:90%;overflow:auto;}
     input[type=text]{padding:.35rem .6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.9rem;}
     button{background:var(--accent);color:#fff;border:none;padding:.45rem .75rem;border-radius:var(--radius);font-size:.9rem;cursor:pointer;transition:opacity .2s;}
     button:disabled{opacity:.4;cursor:not-allowed;}button:hover:not(:disabled){opacity:.85;}
     ul{margin:0;padding-left:1rem;}li{margin-bottom:.3rem;font-size:.85rem;}
     #routeSteps li{list-style:decimal;}
     #playRouteBtn{background:none;color:var(--accent);font-size:1.1rem;padding:0 .2rem;cursor:pointer;}
-    .bikeIcon{font-size:28px;line-height:28px;}  
+    .bikeIcon{font-size:28px;line-height:28px;}
   </style>
 </head>
 <body>
@@ -41,92 +40,81 @@
   <script>
     /* ---------- MAP ---------- */
     const map=L.map('map',{keyboard:true}).setView([51.1657,10.4515],6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      attribution:'© OpenStreetMap contributors',maxZoom:19
-    }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
 
-    /* ---------- ELEMENTS ---------- */
-    const startInput=document.getElementById('start');
-    const endInput=document.getElementById('end');
+    /* ---------- UI refs ---------- */
+    const sInput=document.getElementById('start');
+    const eInput=document.getElementById('end');
     const routeBtn=document.getElementById('routeBtn');
     const goBtn=document.getElementById('goBtn');
-    const routeSteps=document.getElementById('routeSteps');
-    const playRouteBtn=document.getElementById('playRouteBtn');
+    const stepsUL=document.getElementById('routeSteps');
+    const playBtn=document.getElementById('playRouteBtn');
 
-    /* ---------- SPEECH ---------- */
+    /* ---------- Speech ---------- */
     let routeSpeech='';
-    function speak(txt,lang='de-DE'){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang=lang;window.speechSynthesis.speak(u);}    
-    playRouteBtn.onclick=()=>routeSpeech&&speak(routeSpeech);
+    function speak(txt,lang='de-DE'){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang=lang;window.speechSynthesis.speak(u);}  
+    playBtn.onclick=()=>routeSpeech&&speak(routeSpeech);
 
-    /* ---------- HELPERS ---------- */
+    /* ---------- Helpers ---------- */
     async function geocode(q){const url='https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q='+encodeURIComponent(q);const r=await fetch(url,{headers:{Referer:'file://'}});return r.json();}
     async function fetchRoute(sLat,sLon,eLat,eLon){const url=`https://router.project-osrm.org/route/v1/cycling/${sLon},${sLat};${eLon},${eLat}?overview=full&geometries=geojson&steps=true`;const r=await fetch(url);if(!r.ok)throw new Error('route');return r.json();}
     const toCoord=async v=>/^(-?\d+\.\d+),(-?\d+\.\d+)$/.test(v)?{lat:+v.split(',')[0],lon:+v.split(',')[1]}:(await geocode(v))[0]&&{lat:+(await geocode(v))[0].lat,lon:+(await geocode(v))[0].lon};
-    const interp=(a,b,t)=>a+(b-a)*t; // linear interp
+    const interp=(a,b,t)=>a+(b-a)*t;
 
-    /* ---------- STATE ---------- */
-    let markerStart,markerEnd,routeLine,navMarker;
-    let latlngs=[]; // route as LatLngs
+    async function fetchPOIName(lat,lon){
+      const q=`[out:json][timeout:15];(node(around:250,${lat},${lon})["name"];way(around:250,${lat},${lon})["name"];);out center 1;`;
+      const url='https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q);
+      try{const r=await fetch(url);if(!r.ok)throw'';const d=await r.json();if(d.elements.length){return d.elements[0].tags.name;}return null;}catch{return null;}
+    }
 
-    /* ---------- ROUTE BUTTON ---------- */
+    /* ---------- State ---------- */
+    let mStart,mEnd,line,nav;let latlngs=[];
+
+    /* ---------- Route ---------- */
     routeBtn.onclick=async()=>{
-      const sv=startInput.value.trim(),ev=endInput.value.trim();
-      if(!sv||!ev){alert('Enter start and destination');return;}
+      const sv=sInput.value.trim(),ev=eInput.value.trim();if(!sv||!ev){alert('Enter start & destination');return;}
       try{
         const s=await toCoord(sv);const t=await toCoord(ev);
-        markerStart&&map.removeLayer(markerStart);markerEnd&&map.removeLayer(markerEnd);
-        markerStart=L.marker([s.lat,s.lon]).addTo(map);
-        markerEnd=L.marker([t.lat,t.lon]).addTo(map);
+        mStart&&map.removeLayer(mStart);mEnd&&map.removeLayer(mEnd);
+        mStart=L.marker([s.lat,s.lon]).addTo(map);mEnd=L.marker([t.lat,t.lon]).addTo(map);
         const data=await fetchRoute(s.lat,s.lon,t.lat,t.lon);
-        const route=data.routes[0];
-        latlngs=route.geometry.coordinates.map(c=>L.latLng(c[1],c[0]));
-        routeLine&&map.removeLayer(routeLine);
-        routeLine=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map);
-        map.fitBounds(routeLine.getBounds(),{padding:[30,30]});
-        // steps & speech
-        routeSteps.innerHTML='';routeSpeech='';
-        route.legs[0].steps.forEach((st,i)=>{const li=document.createElement('li');li.textContent=st.maneuver.instruction||'Continue';routeSteps.appendChild(li);routeSpeech+=`${i+1}. ${li.textContent}. `;});
-        goBtn.disabled=false;
-        speak('Bike route ready. Press Go to start.');
+        const route=data.routes[0];latlngs=route.geometry.coordinates.map(c=>L.latLng(c[1],c[0]));
+        line&&map.removeLayer(line);line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map);
+        map.fitBounds(line.getBounds(),{padding:[30,30]});
+        stepsUL.innerHTML='';routeSpeech='';route.legs[0].steps.forEach((st,i)=>{const li=document.createElement('li');li.textContent=st.maneuver.instruction||'Continue';stepsUL.appendChild(li);routeSpeech+=`${i+1}. ${li.textContent}. `;});
+        goBtn.disabled=false;speak('Route ready. Press Go to start.');
       }catch(e){console.warn(e);alert('Routing failed');}
     };
 
-    /* ---------- ANIMATED NAVIGATION ---------- */
+    /* ---------- Animate ---------- */
     goBtn.onclick=()=>{
-      if(latlngs.length<2)return;
-      goBtn.disabled=true;
+      if(latlngs.length<2)return;goBtn.disabled=true;nav&&map.removeLayer(nav);
+      nav=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[28,28]})}).addTo(map);
       speak('Navigation started.');
-      navMarker&&map.removeLayer(navMarker);
-      navMarker=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[28,28]})}).addTo(map);
+      const speed=13.9; // m/s ~50km/h
+      let segIdx=0,segStart=latlngs[0],segEnd=latlngs[1];
+      let segDist=segStart.distanceTo(segEnd),segDuration=segDist/speed;let segStartTS=null;
+      let travelled=0,lastAnnouncedKm=-1;
 
-      const speed=5; // m/s (~18 km/h)
-      let segIdx=0;let segStart=latlngs[0];let segEnd=latlngs[1];
-      let segDist=segStart.distanceTo(segEnd);let segTime=segDist/speed;let segStartTS=null; // ms
-
-      function animate(ts){
+      async function tick(ts){
         if(!segStartTS)segStartTS=ts;
-        const t=(ts-segStartTS)/1000; // elapsed seconds on this segment
-        let progress=t/segTime;
+        let prog=(ts-segStartTS)/1000/segDuration;
+        while(prog>=1 && segIdx<latlngs.length-2){
+          travelled+=segDist;
+          segIdx++;segStart=latlngs[segIdx];segEnd=latlngs[segIdx+1];segDist=segStart.distanceTo(segEnd);segDuration=segDist/speed;segStartTS+=segDuration*1000;prog=(ts-segStartTS)/1000/segDuration;
+        }
+        if(segIdx>=latlngs.length-1){nav.setLatLng(latlngs[latlngs.length-1]);map.panTo(latlngs[latlngs.length-1]);speak('You have arrived at your destination.');goBtn.disabled=false;return;}
+        prog=Math.max(0,Math.min(prog,1));
+        const lat=interp(segStart.lat,segEnd.lat,prog);const lon=interp(segStart.lng,segEnd.lng,prog);
+        nav.setLatLng([lat,lon]);map.panTo([lat,lon],{animate:false});
 
-        while(progress>=1 && segIdx<latlngs.length-2){ // move to next segment
-          segIdx++;segStart=latlngs[segIdx];segEnd=latlngs[segIdx+1];segDist=segStart.distanceTo(segEnd);segTime=segDist/speed;segStartTS+=segTime*1000;progress=(ts-segStartTS)/1000/segTime;
-        }
-        if(segIdx>=latlngs.length-1){ // finished
-          navMarker.setLatLng(latlngs[latlngs.length-1]);
-          map.panTo(latlngs[latlngs.length-1]);
-          speak('You have arrived at your destination.');
-          goBtn.disabled=false;
-          return; // stop animation
-        }
-        // interpolate position
-        progress=Math.min(progress,1);
-        const lat=interp(segStart.lat,segEnd.lat,progress);
-        const lon=interp(segStart.lng,segEnd.lng,progress);
-        navMarker.setLatLng([lat,lon]);
-        map.panTo([lat,lon],{animate:false});
-        requestAnimationFrame(animate);
+        // update travelled continuously
+        travelled+=speed*(1/60); // approx since RAF ~60fps
+        const kmBucket=Math.floor(travelled/10000);
+        if(kmBucket>lastAnnouncedKm){lastAnnouncedKm=kmBucket;fetchPOIName(lat,lon).then(name=>{if(name)speak(`In der Nähe: ${name}`);});}
+        requestAnimationFrame(tick);
       }
-      requestAnimationFrame(animate);
+      requestAnimationFrame(tick);
     };
   </script>
   <script src="lume-voice.js"></script>
