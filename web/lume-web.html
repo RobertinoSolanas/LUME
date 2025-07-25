@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LUME – Bike Nav (distance)</title>
+  <title>LUME – Bike Nav (Smart Cache)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
   <style>
     :root { --accent:#1abc9c; --bg:#fff; --radius:.75rem; --shadow:0 2px 6px rgba(0,0,0,.15);}  
@@ -14,8 +14,7 @@
     input[type=text]{padding:.35rem .6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.9rem;}
     button{background:var(--accent);color:#fff;border:none;padding:.45rem .75rem;border-radius:var(--radius);font-size:.9rem;cursor:pointer;transition:opacity .2s;}
     button:disabled{opacity:.4;cursor:not-allowed;}button:hover:not(:disabled){opacity:.85;}
-    ul{margin:0;padding-left:1rem;}li{margin-bottom:.3rem;font-size:.85rem;}
-    .bikeIcon{font-size:28px;line-height:28px;}
+    .bikeIcon{font-size:30px;line-height:30px;}
   </style>
 </head>
 <body>
@@ -37,81 +36,72 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
+    /* ------ Map ------ */
     const map=L.map('map',{keyboard:true}).setView([51.1657,10.4515],6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
 
-    const startEl=document.getElementById('start');
-    const endEl=document.getElementById('end');
-    const routeBtn=document.getElementById('routeBtn');
-    const goBtn=document.getElementById('goBtn');
-    const stepsUL=document.getElementById('routeSteps');
-    const playBtn=document.getElementById('playRouteBtn');
+    /* ------ Elements ------ */
+    const sIn=document.getElementById('start'), eIn=document.getElementById('end');
+    const routeBtn=document.getElementById('routeBtn'), goBtn=document.getElementById('goBtn');
+    const stepsUL=document.getElementById('routeSteps'), playBtn=document.getElementById('playRouteBtn');
     const distInfo=document.getElementById('distInfo');
 
-    let latlngs=[], totalDist=0; // metres
+    /* ------ Speech ------ */
     let routeSpeech='';
+    function speak(txt){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.lang='de-DE';window.speechSynthesis.speak(u);}  playBtn.onclick=()=>routeSpeech&&speak(routeSpeech);
 
-    function speak(t){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='de-DE';window.speechSynthesis.speak(u);}  
-    playBtn.onclick=()=>routeSpeech&&speak(routeSpeech);
-
-    async function geocode(q){const url='https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q='+encodeURIComponent(q);const r=await fetch(url,{headers:{Referer:'file://'}});return r.json();}
-    async function fetchRoute(sl,so,el,eo){const url=`https://router.project-osrm.org/route/v1/cycling/${so},${sl};${eo},${el}?overview=full&geometries=geojson&steps=true`;const r=await fetch(url);if(!r.ok)throw new Error('route');return r.json();}
+    /* ------ Helpers ------ */
+    async function geocode(q){const u='https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q='+encodeURIComponent(q);const r=await fetch(u,{headers:{Referer:'file://'}});return r.json();}
+    async function fetchRoute(sl,so,el,eo){const u=`https://router.project-osrm.org/route/v1/cycling/${so},${sl};${eo},${el}?overview=full&geometries=geojson&steps=true`;const r=await fetch(u);if(!r.ok)throw new Error('route');return r.json();}
     const toC=async v=>/^(-?\d+\.\d+),(-?\d+\.\d+)$/.test(v)?{lat:+v.split(',')[0],lon:+v.split(',')[1]}:(await geocode(v))[0]&&{lat:+(await geocode(v))[0].lat,lon:+(await geocode(v))[0].lon};
     const interp=(a,b,t)=>a+(b-a)*t;
+    const sumDist=arr=>arr.reduce((acc,_,i)=>i?acc+arr[i-1].distanceTo(arr[i]):0,0);
 
-    function sumDistance(arr){let d=0;for(let i=0;i<arr.length-1;i++)d+=arr[i].distanceTo(arr[i+1]);return d;}
+    /* ------ POI Cache (20 km windows) ------ */
+    const bucketCache={};
+    function bucketKey(lat,lon){return lat.toFixed(4)+','+lon.toFixed(4);} // coarse ~11m grid
+    async function fetchPOI(lat,lon){const key=bucketKey(lat,lon);if(key in bucketCache)return bucketCache[key];const q=`[out:json][timeout:15];(node(around:250,${lat},${lon})["name"];way(around:250,${lat},${lon})["name"];);out center 1;`;try{const r=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q));if(!r.ok)throw'';const d=await r.json();return bucketCache[key]=d.elements[0]?.tags?.name||null;}catch{return bucketCache[key]=null;}}
 
-    async function fetchPOI(lat,lon){const q=`[out:json][timeout:15];(node(around:250,${lat},${lon})["name"];way(around:250,${lat},${lon})["name"];);out center 1;`;try{const r=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q));if(!r.ok)throw'';const d=await r.json();return d.elements[0]?.tags?.name||null}catch{return null}}
+    // Pre-cache aheadDistance meters from startIdx along latlngs
+    function preCacheAhead(startIdx, aheadMeters){let accum=0;for(let i=startIdx;i<latlngs.length-1 && accum<aheadMeters;i++){const a=latlngs[i],b=latlngs[i+1];const seg=a.distanceTo(b);accum+=seg;fetchPOI((a.lat+b.lat)/2,(a.lng+b.lng)/2);} }
 
-    let mStart,mEnd,line,nav;
+    /* ------ State ------ */
+    let latlngs=[], total=0;
+    let markerStart, markerEnd, line, nav;
 
+    /* ------ Route button ------ */
     routeBtn.onclick=async()=>{
-      const sv=startEl.value.trim(),ev=endEl.value.trim();if(!sv||!ev){alert('Enter start & destination');return;}
-      try{
-        const s=await toC(sv);const e=await toC(ev);
-        mStart&&map.removeLayer(mStart);mEnd&&map.removeLayer(mEnd);
-        mStart=L.marker([s.lat,s.lon]).addTo(map);
-        mEnd=L.marker([e.lat,e.lon]).addTo(map);
-        const data=await fetchRoute(s.lat,s.lon,e.lat,e.lon);
-        latlngs=data.routes[0].geometry.coordinates.map(c=>L.latLng(c[1],c[0]));
-        line&&map.removeLayer(line);line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map);
-        map.fitBounds(line.getBounds(),{padding:[30,30]});
-        totalDist=sumDistance(latlngs);distInfo.textContent=`Distance: ${(totalDist/1000).toFixed(1)} km | left: ${(totalDist/1000).toFixed(1)} km`;
-        stepsUL.innerHTML='';routeSpeech='';data.routes[0].legs[0].steps.forEach((st,i)=>{const li=document.createElement('li');li.textContent=st.maneuver.instruction||'Continue';stepsUL.appendChild(li);routeSpeech+=`${i+1}. ${li.textContent}. `;});
-        goBtn.disabled=false;speak('Route ready. Press Go to start.');
-      }catch(e){console.warn(e);alert('Routing failed');}
-    };
+      const sv=sIn.value.trim(),ev=eIn.value.trim();if(!sv||!ev){alert('Enter start & destination');return;}
+      try{const s=await toC(sv), t=await toC(ev);markerStart&&map.removeLayer(markerStart);markerEnd&&map.removeLayer(markerEnd);markerStart=L.marker([s.lat,s.lon]).addTo(map);markerEnd=L.marker([t.lat,t.lon]).addTo(map);const data=await fetchRoute(s.lat,s.lon,t.lat,t.lon);latlngs=data.routes[0].geometry.coordinates.map(c=>L.latLng(c[1],c[0]));line&&map.removeLayer(line);line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[30,30]});total=sumDist(latlngs);distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${(total/1000).toFixed(1)} km`;stepsUL.innerHTML='';routeSpeech='';data.routes[0].legs[0].steps.forEach((st,i)=>{const li=document.createElement('li');li.textContent=st.maneuver.instruction||'Continue';stepsUL.appendChild(li);routeSpeech+=`${i+1}. ${li.textContent}. `;});goBtn.disabled=false;speak('Route ready. Press Go to start.');}
+      catch(e){console.warn(e);alert('Route failed');}}
 
+    /* ------ Go button ------ */
     goBtn.onclick=()=>{
-      if(latlngs.length<2)return;goBtn.disabled=true;nav&&map.removeLayer(nav);
-      nav=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[28,28]})}).addTo(map);
-      speak('Navigation started.');
-      const speed=13.9; // m/s 50 km/h
-      let segIdx=0,segStart=latlngs[0],segEnd=latlngs[1];
-      let segDist=segStart.distanceTo(segEnd),segDur=segDist/speed;let segStartTS=null;
-      let travelled=0,lastPOIKm=0,lastDistUpdate=0;
-
-      function raf(ts){
-        if(!segStartTS)segStartTS=ts;
-        let prog=(ts-segStartTS)/1000/segDur;
-        while(prog>=1 && segIdx<latlngs.length-2){
-          travelled+=segDist;segIdx++;segStart=latlngs[segIdx];segEnd=latlngs[segIdx+1];segDist=segStart.distanceTo(segEnd);segDur=segDist/speed;segStartTS+=segDur*1000;prog=(ts-segStartTS)/1000/segDur;
-        }
-        if(segIdx>=latlngs.length-1){nav.setLatLng(latlngs[latlngs.length-1]);map.panTo(latlngs[latlngs.length-1]);speak('You have arrived at your destination.');distInfo.textContent=`Distance: ${(totalDist/1000).toFixed(1)} km | left: 0 km`;goBtn.disabled=false;return;}
-        prog=Math.max(0,Math.min(prog,1));
-        const lat=interp(segStart.lat,segEnd.lat,prog);const lon=interp(segStart.lng,segEnd.lng,prog);
-        nav.setLatLng([lat,lon]);map.panTo([lat,lon],{animate:false});
-
-        const nowDist=travelled+segDist*prog; // meters
-        if(ts-lastDistUpdate>5000){lastDistUpdate=ts;const left=totalDist-nowDist;distInfo.textContent=`Distance: ${(totalDist/1000).toFixed(1)} km | left: ${(left/1000).toFixed(1)} km`;}
-
-        const kmBucket=Math.floor(nowDist/10000);
-        if(kmBucket>lastPOIKm){lastPOIKm=kmBucket;fetchPOI(lat,lon).then(name=>{if(name)speak(`In der Nähe: ${name}`);});}
-        requestAnimationFrame(raf);
-      }
-      requestAnimationFrame(raf);
+      if(latlngs.length<2)return;goBtn.disabled=true;
+      // Happy face pause 1.5s
+      nav&&map.removeLayer(nav);
+      nav=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'😃',iconSize:[30,30]})}).addTo(map);
+      speak('Los geht’s!');
+      preCacheAhead(0,50000); // initial 50 km cache
+      setTimeout(()=>{
+        // switch to bike icon & start animation
+        nav.setIcon(L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[30,30]}));
+        animateRide();
+      },1500);
     };
-  </script>
+
+    /* ------ Ride animation function ------ */
+    function animateRide(){
+      const speed=13.9; // 50 km/h
+      let idx=0,segS=latlngs[0],segE=latlngs[1],segD=segS.distanceTo(segE),segT=segD/speed,segTS=null;
+      let travelled=0,lastPOIAnn=0,lastCacheTrigger=0,lastUpdate=0;
+      function raf(ts){if(!segTS)segTS=ts;let prog=(ts-segTS)/1000/segT;while(prog>=1&&idx<latlngs.length-2){travelled+=segD;idx++;segS=latlngs[idx];segE=latlngs[idx+1];segD=segS.distanceTo(segE);segT=segD/speed;segTS+=segT*1000;prog=(ts-segTS)/1000/segT;}if(idx>=latlngs.length-1){nav.setLatLng(latlngs.at(-1));map.panTo(latlngs.at(-1));speak('You have arrived at your destination.');distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`;goBtn.disabled=false;return;}prog=Math.min(Math.max(prog,0),1);const lat=interp(segS.lat,segE.lat,prog),lon=interp(segS.lng,segE.lng,prog);nav.setLatLng([lat,lon]);map.panTo([lat,lon],{animate:false});const now=travelled+segD*prog; // metres
+        // distance panel every 5s
+        if(ts-lastUpdate>5000){lastUpdate=ts;const left=total-now;distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${(left/1000).toFixed(1)} km`;}
+        // POI voice each 10 km bucket
+        const kmBucket=Math.floor(now/10000);if(kmBucket>lastPOIAnn){lastPOIAnn=kmBucket;fetchPOI(lat,lon).then(n=>{if(n)speak(`In der Nähe: ${n}`);});}
+        // Cache ahead: every 20 km progress cache next 20 km
+        if(now-lastCacheTrigger>20000){lastCacheTrigger+=20000;preCacheAhead(idx,20000);}requestAnimationFrame(raf);}requestAnimationFrame(raf);}  </script>
   <script src="lume-voice.js"></script>
 </body>
 </html>
