@@ -99,8 +99,11 @@
           const handleName=(name)=>{if(!name)return;recentPOIs.unshift(name);if(recentPOIs.length>3)recentPOIs.pop();speak(`In der Nähe: ${name}`);renderPoiList();};
           if(upcomingPOIs[kmCurr]){handleName(upcomingPOIs[kmCurr]);}
           else{fetchPOI(lat,lon).then(n=>{if(n){upcomingPOIs[kmCurr]=n;handleName(n);}});}
-        }}};renderPoiList();
-        requestAnimationFrame(frame);requestAnimationFrame(frame);  </script>
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }  </script>
   <script src="lume-voice.js"></script>
 </body>
 </html>
