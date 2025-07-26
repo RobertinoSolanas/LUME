@@ -3,229 +3,104 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LUME – Bike Nav (POI every 1 km)</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
+  <title>LUME – Bike Nav (next‑3 POIs, 500 m corridor)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
   <style>
-    :root { --accent:#1abc9c; --bg:#fff; --radius:.75rem; --shadow:0 2px 6px rgba(0,0,0,.15);}  
-    html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f5f7f8;}
-    #map{height:100%;width:100%;}
-    #controls{position:absolute;top:10px;left:10px;z-index:1000;background:var(--bg);padding:.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);display:grid;gap:.4rem;grid-template-columns:1fr 1fr auto auto;width:480px;align-items:center;}
-    #info{position:absolute;top:10px;right:10px;z-index:1000;background:var(--bg);padding:.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow);width:360px;max-height:90%;overflow:auto;}
-    input[type=text]{padding:.35rem .6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.9rem;}
-    button{background:var(--accent);color:#fff;border:none;padding:.45rem .75rem;border-radius:var(--radius);font-size:.9rem;cursor:pointer;transition:opacity .2s;}
-    button:disabled{opacity:.4;cursor:not-allowed;}button:hover:not(:disabled){opacity:.85;}
-    .bikeIcon{font-size:30px;line-height:30px;}
+    :root{--accent:#1abc9c;--bg:#fff;--radius:.7rem;--shadow:0 2px 6px rgba(0,0,0,.15)}
+    html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f6f8f9}
+    #map{height:100%;width:100%}
+    #controls,#info{position:absolute;top:10px;z-index:1000;background:var(--bg);padding:.75rem 1rem;border-radius:var(--radius);box-shadow:var(--shadow)}
+    #controls{left:10px;display:grid;gap:.4rem;grid-template-columns:1fr 1fr auto auto;width:480px;align-items:center}
+    #info{right:10px;width:360px;max-height:90%;overflow:auto}
+    input[type=text]{padding:.35rem .6rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.9rem}
+    button{background:var(--accent);color:#fff;border:none;padding:.45rem .75rem;border-radius:var(--radius);font-size:.9rem;cursor:pointer;transition:opacity .2s}
+    button:disabled{opacity:.4;cursor:not-allowed}button:hover:not(:disabled){opacity:.85}
+    .bikeIcon{font-size:30px;line-height:30px}
+    ul{margin:0;padding-left:1rem}li{margin-bottom:.3rem;font-size:.85rem}
   </style>
 </head>
 <body>
   <form id="controls" onsubmit="return false;">
-    <input id="start" placeholder="Start (addr or lat,lon)" />
-    <input id="end"   placeholder="Destination (addr or lat,lon)" />
+    <input id="start" placeholder="Start (addr or lat,lon)">
+    <input id="end"   placeholder="Destination (addr or lat,lon)">
     <button id="routeBtn">Route</button>
-    <button id="goBtn"    disabled>Go</button>
+    <button id="goBtn" disabled>Go</button>
   </form>
-
   <aside id="info">
-    <h3>Route information</h3>
-    <p id="distInfo">Distance: –</p>
-    <button id="playRouteBtn" aria-label="Speak route">🔊</button>
-    <h4>Key turns (&gt;10 km)</h4>
+    <h3>Route info</h3>
+    <p id="distInfo">Distance –</p>
+    <button id="playRouteBtn" aria-label="Speak turns">🔊</button>
+    <h4>Major turns (&gt;10 km)</h4>
     <ul id="routeSteps"></ul>
-    <h4>Last 3 POIs</h4>
+    <h4>Next 3 POIs (&lt;500 m corridor)</h4>
     <ul id="poiList"></ul>
   </aside>
-
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <script>
-    /* -------- Map -------- */
-    const map = L.map('map', { keyboard: true }).setView([51.1657, 10.4515], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors', maxZoom: 19
-    }).addTo(map);
+    /* ---------- Map ---------- */
+    const map=L.map('map',{keyboard:true}).setView([51.1657,10.4515],6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
 
-    /* -------- Elements -------- */
-    const sIn = document.getElementById('start');
-    const eIn = document.getElementById('end');
-    const routeBtn = document.getElementById('routeBtn');
-    const goBtn = document.getElementById('goBtn');
-    const stepsUL = document.getElementById('routeSteps');
-    const playBtn = document.getElementById('playRouteBtn');
-    const distInfo = document.getElementById('distInfo');
-    const poiList = document.getElementById('poiList');
+    /* ---------- Elements ---------- */
+    const sIn=start,eIn=end,routeBtn=document.getElementById('routeBtn'),goBtn=document.getElementById('goBtn');
+    const stepsUL=document.getElementById('routeSteps'),playBtn=document.getElementById('playRouteBtn');
+    const distInfo=document.getElementById('distInfo'),poiList=document.getElementById('poiList');
 
-    /* -------- Speech -------- */
-    let routeSpeech = '';
-    function speak(txt) {
-      if (!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(txt);
-      u.lang = 'de-DE';
-      window.speechSynthesis.speak(u);
-    }
-    playBtn.onclick = () => routeSpeech && speak(routeSpeech);
+    /* ---------- Speech ---------- */
+    let routeSpeech='';
+    function speak(t){if(!('speechSynthesis'in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='de-DE';window.speechSynthesis.speak(u);}playBtn.onclick=()=>routeSpeech&&speak(routeSpeech);
 
-    /* -------- Helpers -------- */
-    async function geocode(q) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q=${encodeURIComponent(q)}`;
-      const r = await fetch(url, { headers: { Referer: 'file://' } });
-      return r.json();
-    }
-    async function fetchRoute(sl, so, el, eo) {
-      const url = `https://router.project-osrm.org/route/v1/cycling/${so},${sl};${eo},${el}?overview=full&geometries=geojson&steps=true`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('route');
-      return r.json();
-    }
-    const toC = async v => (/^-?\d+\.\d+,-?\d+\.\d+$/.test(v)
-      ? { lat: +v.split(',')[0], lon: +v.split(',')[1] }
-      : (() => geocode(v).then(res => ({ lat: +res[0].lat, lon: +res[0].lon })))());
+    /* ---------- Helpers ---------- */
+    async function geocode(q){const u=`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=1&q=${encodeURIComponent(q)}`;const r=await fetch(u,{headers:{Referer:'file://'}});return r.json();}
+    async function fetchRoute(sl,so,el,eo){const u=`https://router.project-osrm.org/route/v1/cycling/${so},${sl};${eo},${el}?overview=full&geometries=geojson&steps=true`;const r=await fetch(u);if(!r.ok)throw new Error('route');return r.json();}
+    const toC=async v=>{if(/^(-?\d+\.\d+),(-?\d+\.\d+)$/.test(v)){const[lat,lon]=v.split(',').map(Number);return{lat,lon};}const res=await geocode(v);if(!res.length)throw new Error('Geocode');return{lat:+res[0].lat,lon:+res[0].lon}};
+    const interp=(a,b,t)=>a+(b-a)*t;const sumDist=a=>a.reduce((d,_,i)=>i?d+a[i-1].distanceTo(a[i]):0,0);
 
-    const interp = (a, b, t) => a + (b - a) * t;
-    const sumDist = arr => arr.reduce((d, _, i) => i ? d + arr[i - 1].distanceTo(arr[i]) : 0, 0);
+    /* ---------- POI cache ---------- */
+    const poiCache={}; // key->name|null|Promise
+    async function fetchPOI(lat,lon){const key=lat.toFixed(4)+','+lon.toFixed(4);if(poiCache[key]!==undefined)return poiCache[key];poiCache[key]=new Promise(async res=>{const q=`[out:json][timeout:25];(node(around:300,${lat},${lon})["name"];way(around:300,${lat},${lon})["name"];);out body 1;`;try{const r=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q));if(!r.ok)throw'';const d=await r.json();const n=d.elements[0]?.tags?.name||null;poiCache[key]=n;res(n);}catch{poiCache[key]=null;res(null);}});return poiCache[key];}
 
-    async function fetchPOI(lat, lon) {
-      const q = `[out:json][timeout:10];(node(around:500,${lat},${lon})["name"];way(around:500,${lat},${lon})["name"];);out center 1;`;
-      try {
-        const r = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q));
-        if (!r.ok) throw '';
-        const d = await r.json();
-        return d.elements[0]?.tags?.name || null;
-      } catch {
-        return null;
-      }
+    /* ---------- State ---------- */
+    let latlngs=[],total=0,markerStart,markerEnd,line,nav;
+    let upcomingPOIs = {};   // kmIndex → name (cache)
+    let poiIdxKm = 0;          // km pointer while riding
+    const recentPOIs = [];     // last 3 announced
+    let poiMarkers = [];
+
+    function renderPoiList(){
+      poiList.innerHTML='';
+      recentPOIs.forEach(name=>{const li=document.createElement('li');li.textContent=name;poiList.appendChild(li);});
+      if(!recentPOIs.length)poiList.innerHTML='<li>No POIs yet</li>';
     }
 
-    /* -------- State -------- */
-    let latlngs = [], total = 0;
-    let markerStart, markerEnd, line, nav;
-    let lastPois = [];
+    function addPoiMarker(lat,lon,name){const m=L.circleMarker([lat,lon],{radius:4,color:'#1abc9c'}).addTo(map).bindPopup(name);poiMarkers.push(m);}
 
-    /* -------- Route generation -------- */
-    routeBtn.onclick = async () => {
-      const s = sIn.value.trim();
-      const t = eIn.value.trim();
-      if (!s || !t) return alert('Enter start & destination');
-      try {
-        const S = await toC(s);
-        const T = await toC(t);
-        markerStart?.remove(); markerEnd?.remove();
-        markerStart = L.marker([S.lat, S.lon]).addTo(map);
-        markerEnd   = L.marker([T.lat, T.lon]).addTo(map);
+    async function preSamplePOIs(){upcomingPOIs={};poiMarkers.forEach(m=>map.removeLayer(m));poiMarkers=[];poiList.innerHTML='<li>Loading…</li>';
+      // sample every km along route
+      const samples=[];let kmAcc=0;for(let i=0;i<latlngs.length-1;i++){let a=latlngs[i],b=latlngs[i+1];let seg=a.distanceTo(b),remain=seg,from=a;while(kmAcc+remain>=1000){const need=1000-kmAcc;const r=need/remain;const lat=from.lat+(b.lat-from.lat)*r;const lon=from.lng+(b.lng-from.lng)*r;samples.push({km:samples.length+1,lat,lon});from=L.latLng(lat,lon);remain-=need;kmAcc=0;}kmAcc+=remain;}
+      // batch 30 points per query
+      const chunk=30;for(let off=0;off<samples.length;off+=chunk){const sub=samples.slice(off,off+chunk);const qParts=sub.map(s=>`(node(around:500,${s.lat},${s.lon})["name"];way(around:500,${s.lat},${s.lon})["name"];);`).join('');const q=`[out:json][timeout:50];${qParts}out center;`;try{const r=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(q));if(r.ok){const j=await r.json();j.elements.forEach(el=>{const lat=el.lat??el.center?.lat,lon=el.lon??el.center?.lon;const name=el.tags?.name;if(!name)return; // nearest km index
+          let nearest=1e6,kmIndex=null;sub.forEach(s=>{const d=Math.hypot(s.lat-lat,s.lon-lon);if(d<nearest){nearest=d;kmIndex=s.km;}});if(kmIndex&&!upcomingPOIs[kmIndex]){upcomingPOIs[kmIndex]=name;addPoiMarker(lat,lon,name);}});renderPoiList();} }catch(e){console.warn('Overpass batch',e);}await new Promise(r=>setTimeout(r,1200));}
+      renderPoiList();}
 
-        const data = await fetchRoute(S.lat, S.lon, T.lat, T.lon);
-        latlngs = data.routes[0].geometry.coordinates.map(c => L.latLng(c[1], c[0]));
-        line?.remove();
-        line = L.polyline(latlngs, { color: '#FF5722', weight: 4 }).addTo(map);
-        map.fitBounds(line.getBounds(), { padding: [30, 30] });
+    /* ---------- Route generation ---------- */
+    routeBtn.onclick=async()=>{const s=sIn.value.trim(),t=eIn.value.trim();if(!s||!t)return alert('Enter start & destination');try{const S=await toC(s),T=await toC(t);markerStart?.remove();markerEnd?.remove();markerStart=L.marker([S.lat,S.lon]).addTo(map);markerEnd=L.marker([T.lat,T.lon]).addTo(map);const data=await fetchRoute(S.lat,S.lon,T.lat,T.lon);latlngs=data.routes[0].geometry.coordinates.map(c=>L.latLng(c[1],c[0]));line?.remove();line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map);map.fitBounds(line.getBounds(),{padding:[30,30]});total=sumDist(latlngs);distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${(total/1000).toFixed(1)} km`;stepsUL.innerHTML='';routeSpeech='';data.routes[0].legs[0].steps.filter(st=>{const instr=st?.maneuver?.instruction||'';return instr.toLowerCase()!=='continue'&&(st.distance??0)>10000;}).forEach((st,i)=>{const li=document.createElement('li');li.textContent=st.maneuver.instruction;stepsUL.appendChild(li);routeSpeech+=`${i+1}. ${li.textContent}. `;});if(!stepsUL.childElementCount)stepsUL.innerHTML='<li>No major turns.</li>';poiIdxKm=0;preSamplePOIs();goBtn.disabled=false;speak('Route ready. Press Go to start.');}catch(e){console.warn(e);alert('Routing failed');}};
 
-        total = sumDist(latlngs);
-        distInfo.textContent = `Distance: ${(total / 1000).toFixed(1)} km | left: ${(total / 1000).toFixed(1)} km`;
+    /* ---------- Start ride ---------- */
+    goBtn.onclick=()=>{if(latlngs.length<2)return;goBtn.disabled=true;nav?.remove();nav=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'😃',iconSize:[30,30]})}).addTo(map);speak('Los geht’s!');setTimeout(()=>{nav.setIcon(L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[30,30]}));map.setView(nav.getLatLng());animate();},1500);} ;
 
-        // key turns
-        stepsUL.innerHTML = '';
-        routeSpeech = '';
-        data.routes[0].legs[0].steps.filter(st => {
-          const instr = st?.maneuver?.instruction || '';
-          return instr.toLowerCase() !== 'continue' && (st.distance ?? 0) > 10000;
-        }).forEach((st, i) => {
-          const li = document.createElement('li');
-          li.textContent = st.maneuver.instruction;
-          stepsUL.appendChild(li);
-          routeSpeech += `${i + 1}. ${li.textContent}. `;
-        });
-        if (!stepsUL.childElementCount) {
-          const li = document.createElement('li');
-          li.textContent = 'No major turns.';
-          stepsUL.appendChild(li);
-        }
-
-        goBtn.disabled = false;
-        speak('Route ready. Press Go to start.');
-      } catch (e) {
-        console.warn(e);
-        alert('Routing failed');
-      }
-    };
-
-    /* -------- Start ride -------- */
-    goBtn.onclick = () => {
-      if (latlngs.length < 2) return;
-      goBtn.disabled = true;
-      lastPois = [];
-      poiList.innerHTML = '';
-      nav?.remove();
-      nav = L.marker(latlngs[0], { icon: L.divIcon({ className: 'bikeIcon', html: '😃', iconSize: [30, 30] }) }).addTo(map);
-      speak('Los geht’s!');
-      setTimeout(() => {
-        nav.setIcon(L.divIcon({ className: 'bikeIcon', html: '🚲', iconSize: [30, 30] }));
-        map.setView(nav.getLatLng());
-        animate();
-      }, 1500);
-    };
-
-    /* -------- Animation -------- */
-    function animate() {
-      const speed = 20.8; // 75 km/h
-      let i = 0, s = latlngs[0], e = latlngs[1], d = s.distanceTo(e), segT = d / speed, segStartTs = null;
-      let traveled = 0, lastPOIKm = 0, lastUI = 0;
-
-      function frame(ts) {
-        if (!segStartTs) segStartTs = ts;
-        let p = (ts - segStartTs) / 1000 / segT;
-        while (p >= 1 && i < latlngs.length - 2) {
-          traveled += d;
-          i++;
-          s = latlngs[i];
-          e = latlngs[i + 1];
-          d = s.distanceTo(e);
-          segT = d / speed;
-          segStartTs += segT * 1000;
-          p = (ts - segStartTs) / 1000 / segT;
-        }
-        if (i >= latlngs.length - 1) {
-          nav.setLatLng(latlngs.at(-1));
-          map.panTo(latlngs.at(-1));
-          speak('Angekommen.');
-          distInfo.textContent = `Distance: ${(total / 1000).toFixed(1)} km | left: 0 km`;
-          goBtn.disabled = false;
-          return;
-        }
-        p = Math.max(0, Math.min(1, p));
-        const lat = interp(s.lat, e.lat, p);
-        const lon = interp(s.lng, e.lng, p);
-        nav.setLatLng([lat, lon]);
-        map.panTo([lat, lon], { animate: false });
-
-        const now = traveled + d * p;
-        if (ts - lastUI > 5000) {
-          lastUI = ts;
-          distInfo.textContent = `Distance: ${(total / 1000).toFixed(1)} km | left: ${((total - now) / 1000).toFixed(1)} km`;
-        }
-
-        const bucket = Math.floor(now / 1000);
-        if (bucket > lastPOIKm) {
-          lastPOIKm = bucket;
-          fetchPOI(lat, lon).then(name => {
-            if (name && (lastPois.length === 0 || lastPois[lastPois.length - 1] !== name)) {
-              lastPois.push(name);
-              if (lastPois.length > 3) lastPois.shift();
-              poiList.innerHTML = '';
-              lastPois.forEach(poi => {
-                const li = document.createElement('li');
-                li.textContent = poi;
-                poiList.appendChild(li);
-              });
-              speak(`In der Nähe: ${name}`);
-            }
-          });
-        }
-        requestAnimationFrame(frame);
-      }
-      requestAnimationFrame(frame);
-    }
-  </script>
+    /* ---------- Animation ---------- */
+    function animate(){const speed=20.8;let i=0,s=latlngs[0],e=latlngs[1],d=s.distanceTo(e),segT=d/speed,segStart=null;let traveled=0,lastUI=0;function frame(ts){if(!segStart)segStart=ts;let p=(ts-segStart)/1000/segT;while(p>=1&&i<latlngs.length-2){traveled+=d;i++;s=latlngs[i];e=latlngs[i+1];d=s.distanceTo(e);segT=d/speed;segStart+=segT*1000;p=(ts-segStart)/1000/segT;}if(i>=latlngs.length-1){nav.setLatLng(latlngs.at(-1));map.panTo(latlngs.at(-1));speak('Angekommen.');distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`;goBtn.disabled=false;return;}p=Math.max(0,Math.min(1,p));const lat=interp(s.lat,e.lat,p),lon=interp(s.lng,e.lng,p);nav.setLatLng([lat,lon]);map.panTo([lat,lon],{animate:false});const now=traveled+d*p;if(ts-lastUI>5000){lastUI=ts;distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${((total-now)/1000).toFixed(1)} km`;}
+        const kmCurr=Math.floor(now/1000);
+        if(kmCurr>poiIdxKm){
+          poiIdxKm=kmCurr;
+          const handleName=(name)=>{if(!name)return;recentPOIs.unshift(name);if(recentPOIs.length>3)recentPOIs.pop();speak(`In der Nähe: ${name}`);renderPoiList();};
+          if(upcomingPOIs[kmCurr]){handleName(upcomingPOIs[kmCurr]);}
+          else{fetchPOI(lat,lon).then(n=>{if(n){upcomingPOIs[kmCurr]=n;handleName(n);}});}
+        }}};renderPoiList();
+        requestAnimationFrame(frame);requestAnimationFrame(frame);  </script>
   <script src="lume-voice.js"></script>
 </body>
 </html>
