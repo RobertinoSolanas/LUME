@@ -23,7 +23,8 @@
     div.id = 'liveBox';
     div.style.cssText = 'position:absolute;top:140px;left:10px;z-index:1000;background:var(--bg);padding:.6rem .9rem;border-radius:var(--radius);box-shadow:var(--shadow);font-size:.85rem;line-height:1.4;';
     div.innerHTML = `<div><strong>Coord:</strong> <span id="liveCoord">–</span></div>
-                     <div><strong>POI:</strong> <span id="livePoi">–</span></div>`;
+                     <div><strong>POI:</strong> <span id="livePoi">–</span></div>
+                     <div><strong>Speed:</strong> <span id="liveSpeed">– km/h</span></div>`;
     document.body.appendChild(div);
     return div;
   })();
@@ -86,11 +87,17 @@
   goBtn.onclick=()=>{ if(latlngs.length<2) return; goBtn.disabled=true; nav?.remove(); nav=L.marker(latlngs[0],{icon:L.divIcon({className:'bikeIcon',html:'😃',iconSize:[30,30]})}).addTo(map); speak('Los geht’s!'); setTimeout(()=>{ nav.setIcon(L.divIcon({className:'bikeIcon',html:'🚲',iconSize:[30,30]})); map.setView(nav.getLatLng()); animate(); },1500); };
 
   /* ---------- Animation ---------- */
-  function animate(){ const speed=20.8; let idx=0, segStart=latlngs[0], segEnd=latlngs[1]; let segDist=segStart.distanceTo(segEnd), segDur=segDist/speed; let segTS=null, traveled=0, lastUI=0;
+  function animate(){ const speed=20.8; let idx=0, segStart=latlngs[0], segEnd=latlngs[1]; let segDist=segStart.distanceTo(segEnd), segDur=segDist/speed; let segTS=null, traveled=0, lastUI=0, lastSpeedUpdate=0, currentSpeed=0;
     function frame(ts){ if(segTS===null) segTS=ts; let prog=(ts-segTS)/1000/segDur; while(prog>=1 && idx<latlngs.length-2){ traveled+=segDist; idx++; segStart=latlngs[idx]; segEnd=latlngs[idx+1]; segDist=segStart.distanceTo(segEnd); segDur=segDist/speed; segTS+=segDur*1000; prog=(ts-segTS)/1000/segDur; }
       if(idx>=latlngs.length-1){ nav.setLatLng(latlngs.at(-1)); map.panTo(latlngs.at(-1)); speak('Angekommen.'); distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`; goBtn.disabled=false; return; }
       prog=Math.max(0,Math.min(1,prog)); const lat=interp(segStart.lat,segEnd.lat,prog), lon=interp(segStart.lng,segEnd.lng,prog); nav.setLatLng([lat,lon]); map.panTo([lat,lon],{animate:false}); liveCoord.textContent=`${lat.toFixed(5)}, ${lon.toFixed(5)}`; console.log('Coord',lat,lon);
-      const now=traveled+segDist*prog; if(ts-lastUI>5000){ lastUI=ts; distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${((total-now)/1000).toFixed(1)} km`; }
+      const now=traveled+segDist*prog; 
+      if(ts-lastSpeedUpdate>1000) {
+        lastSpeedUpdate = ts;
+        currentSpeed = speed * 3.6; // Convert m/s to km/h
+        document.getElementById('liveSpeed').textContent = `${currentSpeed.toFixed(1)} km/h`;
+      }
+      if(ts-lastUI>5000){ lastUI=ts; distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${((total-now)/1000).toFixed(1)} km`; }
       const kmCurr=Math.floor(now/1000); if(kmCurr>poiIdxKm){ poiIdxKm=kmCurr; const announce=n=>{ if(!n) return; recentPOIs.unshift(n); if(recentPOIs.length>3) recentPOIs.pop(); livePoi.textContent=n; console.log('POI',n); speak(`In der Nähe: ${n}`); renderPoiList(); };
         if(upcomingPOIs[kmCurr]) announce(upcomingPOIs[kmCurr]); else fetchPOI(lat,lon).then(n=>{ if(n){ upcomingPOIs[kmCurr]=n; announce(n);} }); }
       requestAnimationFrame(frame);
