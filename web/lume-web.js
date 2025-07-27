@@ -1,5 +1,6 @@
 /* lume-web.js – with live coordinate & POI panel + console logging */
 (function(){
+  const { wikiSummaryFlexible } = window;
   'use strict';
 
   /* ---------- Map setup ---------- */
@@ -46,7 +47,31 @@
   /* ---------- State ---------- */
   let latlngs=[], total=0; let markerStart,markerEnd,line,nav; let upcomingPOIs={},poiIdxKm=0; const recentPOIs=[]; let poiMarkers=[];
 
-  function renderPoiList(){poiList.innerHTML=''; recentPOIs.forEach(n=>{const li=document.createElement('li'); li.textContent=n; poiList.appendChild(li);}); if(!recentPOIs.length) poiList.innerHTML='<li>No POIs yet</li>';}
+  async function renderPoiList(){
+    poiList.innerHTML = '';
+    const poiInfo = document.getElementById('poiInfo');
+    
+    for (const n of recentPOIs) {
+      const li = document.createElement('li');
+      li.textContent = n;
+      li.style.cursor = 'pointer';
+      li.onclick = async () => {
+        try {
+          poiInfo.innerHTML = 'Loading Wikipedia info...';
+          const summary = await wikiSummaryFlexible('de', n);
+          poiInfo.innerHTML = `<strong>${n}:</strong> ${summary}`;
+        } catch (e) {
+          poiInfo.innerHTML = `Couldn't load info for ${n}`;
+        }
+      };
+      poiList.appendChild(li);
+    }
+    
+    if (!recentPOIs.length) {
+      poiList.innerHTML = '<li>No POIs yet</li>';
+      poiInfo.innerHTML = '';
+    }
+  }
   function addPoiMarker(lat,lon,name){poiMarkers.push(L.circleMarker([lat,lon],{radius:4,color:'#1abc9c'}).addTo(map).bindPopup(name));}
 
   /* ---------- Pre‑sample POIs ---------- */
