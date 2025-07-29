@@ -12,10 +12,14 @@
   const eIn      = document.getElementById('end');
   const routeBtn = document.getElementById('routeBtn');
   const goBtn    = document.getElementById('goBtn');
+  const stopBtn  = document.getElementById('stopBtn');
   const stepsUL  = document.getElementById('routeSteps');
   const playBtn  = document.getElementById('playRouteBtn');
   const distInfo = document.getElementById('distInfo');
   const poiList  = document.getElementById('poiList');
+  
+  // Initialize stop button
+  stopBtn.disabled = true;
 
   /* ---------- Live info panel (left) ---------- */
   const liveBox = (()=>{
@@ -84,17 +88,16 @@
   }
 
   /* ---------- Route button ---------- */
-  routeBtn.onclick=async()=>{const s=sIn.value.trim(), t=eIn.value.trim(); if(!s||!t){alert('Enter start & destination'); return;} try{ const S=await toC(s), T=await toC(t); markerStart?.remove(); markerEnd?.remove(); markerStart=L.marker([S.lat,S.lon]).addTo(map); markerEnd=L.marker([T.lat,T.lon]).addTo(map); const data=await fetchRoute(S.lat,S.lon,T.lat,T.lon); latlngs=data.routes[0].geometry.coordinates.map(c=>L.latLng(c[1],c[0])); line?.remove(); line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map); map.fitBounds(line.getBounds(),{padding:[30,30]}); total=sumDist(latlngs); distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${(total/1000).toFixed(1)} km`; stepsUL.innerHTML=''; routeSpeech=''; data.routes[0].legs[0].steps.filter(st=>{const instr=st?.maneuver?.instruction||''; return instr.toLowerCase()!=='continue'&&(st.distance??0)>10000;}).forEach((st,i)=>{const li=document.createElement('li'); li.textContent=st.maneuver.instruction; stepsUL.appendChild(li); routeSpeech+=`${i+1}. ${li.textContent}. `;}); if(!stepsUL.childElementCount) stepsUL.innerHTML='<li>No major turns.</li>'; poiIdxKm=0; recentPOIs.length=0; renderPoiList(); preSamplePOIs(); goBtn.disabled=false; speak('Route ready. Press Go to start.'); }catch(e){console.warn(e); alert('Routing failed');}};
+  routeBtn.onclick=async()=>{const s=sIn.value.trim(), t=eIn.value.trim(); if(!s||!t){alert('Enter start & destination'); return;} try{ const S=await toC(s), T=await toC(t); markerStart?.remove(); markerEnd?.remove(); markerStart=L.marker([S.lat,S.lon]).addTo(map); markerEnd=L.marker([T.lat,T.lon]).addTo(map); const data=await fetchRoute(S.lat,S.lon,T.lat,T.lon); latlngs=data.routes[0].geometry.coordinates.map(c=>L.latLng(c[1],c[0])); line?.remove(); line=L.polyline(latlngs,{color:'#FF5722',weight:4}).addTo(map); map.fitBounds(line.getBounds(),{padding:[30,30]}); total=sumDist(latlngs); distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: ${(total/1000).toFixed(1)} km`; stepsUL.innerHTML=''; routeSpeech=''; data.routes[0].legs[0].steps.filter(st=>{const instr=st?.maneuver?.instruction||''; return instr.toLowerCase()!=='continue'&&(st.distance??0)>10000;}).forEach((st,i)=>{const li=document.createElement('li'); li.textContent=st.maneuver.instruction; stepsUL.appendChild(li); routeSpeech+=`${i+1}. ${li.textContent}. `;}); if(!stepsUL.childElementCount) stepsUL.innerHTML='<li>No major turns.</li>'; poiIdxKm=0; recentPOIs.length=0; renderPoiList(); preSamplePOIs(); goBtn.disabled=false; stopBtn.disabled=true; speak('Route ready. Press Go to start.'); }catch(e){console.warn(e); alert('Routing failed');}};
 
-  /* ---------- Go/Stop button ---------- */
+  /* ---------- Go button ---------- */
   goBtn.onclick = () => {
     if (latlngs.length < 2) return;
     
-    if (!isPlaying) {
-      // Start/resume navigation
-      goBtn.textContent = 'Stop';
-      goBtn.disabled = true;
-      if (!nav) {
+    // Start navigation
+    goBtn.disabled = true;
+    stopBtn.disabled = false;
+    if (!nav) {
         nav = L.marker(latlngs[0], {
           icon: L.divIcon({className:'bikeIcon',html:'😃',iconSize:[30,30]})
         }).addTo(map);
@@ -110,21 +113,30 @@
         animate();
       }
     } else {
-      // Stop navigation
-      goBtn.textContent = 'Go';
-      isPlaying = false;
-      if (animFrame) {
-        cancelAnimationFrame(animFrame);
-        animFrame = null;
-      }
-      goBtn.disabled = false;
-      speak('Navigation gestoppt.');
-      
-      // Store current progress
-      if (segTS !== null) {
-        const progress = Math.min(1, (performance.now() - segTS) / (segDur * 1000));
-        currentPosition = traveled + (segDist * progress);
-      }
+      isPlaying = true;
+      animate();
+    }
+  };
+
+  /* ---------- Stop button ---------- */
+  stopBtn.onclick = () => {
+    if (!isPlaying) return;
+    
+    isPlaying = false;
+    if (animFrame) {
+      cancelAnimationFrame(animFrame);
+      animFrame = null;
+    }
+    
+    // Update UI
+    goBtn.disabled = false;
+    stopBtn.disabled = true;
+    speak('Navigation gestoppt.');
+    
+    // Store current progress
+    if (segTS !== null) {
+      const progress = Math.min(1, (performance.now() - segTS) / (segDur * 1000));
+      currentPosition = traveled + (segDist * progress);
     }
   };
 
@@ -147,7 +159,7 @@
         speak('Angekommen.'); 
         distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`; 
         goBtn.disabled=false; 
-        goBtn.textContent='Go'; 
+        stopBtn.disabled=true; 
         isPlaying=false; 
         if (animFrame) {
           cancelAnimationFrame(animFrame);
