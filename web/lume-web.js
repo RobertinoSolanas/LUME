@@ -96,7 +96,7 @@
     
     // Start navigation
     goBtn.disabled = true;
-    stopBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = false;
     if (!nav) {
         nav = L.marker(latlngs[0], {
           icon: L.divIcon({className:'bikeIcon',html:'😃',iconSize:[30,30]})
@@ -115,26 +115,28 @@
   };
 
   /* ---------- Stop button ---------- */
-  stopBtn.onclick = () => {
-    if (!isPlaying) return;
-    
-    isPlaying = false;
-    if (animFrame) {
-      cancelAnimationFrame(animFrame);
-      animFrame = null;
-    }
-    
-    // Update UI
-    goBtn.disabled = false;
-    stopBtn.disabled = true;
-    speak('Navigation gestoppt.');
-    
-    // Store current progress
-    if (segTS !== null) {
-      const progress = Math.min(1, (performance.now() - segTS) / (segDur * 1000));
-      currentPosition = traveled + (segDist * progress);
-    }
-  };
+  if (stopBtn) {
+    stopBtn.onclick = () => {
+      if (!isPlaying) return;
+      
+      isPlaying = false;
+      if (animFrame) {
+        cancelAnimationFrame(animFrame);
+        animFrame = null;
+      }
+      
+      // Update UI
+      goBtn.disabled = false;
+      stopBtn.disabled = true;
+      speak('Navigation gestoppt.');
+      
+      // Store current progress
+      if (segTS !== null) {
+        const progress = Math.min(1, (performance.now() - segTS) / (segDur * 1000));
+        currentPosition = traveled + (segDist * progress);
+      }
+    };
+  }
 
   /* ---------- Animation ---------- */
   function animate(){ 
@@ -155,7 +157,7 @@
         speak('Angekommen.'); 
         distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`; 
         goBtn.disabled=false; 
-        stopBtn.disabled=true; 
+        if (stopBtn) stopBtn.disabled=true; 
         isPlaying=false; 
         if (animFrame) {
           cancelAnimationFrame(animFrame);
