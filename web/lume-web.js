@@ -113,9 +113,18 @@
       // Stop navigation
       goBtn.textContent = 'Go';
       isPlaying = false;
-      cancelAnimationFrame(animFrame);
-      animFrame = null;
+      if (animFrame) {
+        cancelAnimationFrame(animFrame);
+        animFrame = null;
+      }
       goBtn.disabled = false;
+      speak('Navigation gestoppt.');
+      
+      // Store current progress
+      if (segTS !== null) {
+        const progress = Math.min(1, (performance.now() - segTS) / (segDur * 1000));
+        currentPosition = traveled + (segDist * progress);
+      }
     }
   };
 
@@ -132,7 +141,22 @@
         return;
       }
       if(segTS===null) segTS=ts; let prog=(ts-segTS)/1000/segDur; while(prog>=1 && idx<latlngs.length-2){ traveled+=segDist; idx++; segStart=latlngs[idx]; segEnd=latlngs[idx+1]; segDist=segStart.distanceTo(segEnd); segDur=segDist/speed; segTS+=segDur*1000; prog=(ts-segTS)/1000/segDur; }
-      if(idx>=latlngs.length-1){ nav.setLatLng(latlngs.at(-1)); map.panTo(latlngs.at(-1)); speak('Angekommen.'); distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`; goBtn.disabled=false; goBtn.textContent='Go'; isPlaying=false; nav=null; currentPosition=0; return; }
+      if(idx>=latlngs.length-1){ 
+        nav.setLatLng(latlngs.at(-1)); 
+        map.panTo(latlngs.at(-1)); 
+        speak('Angekommen.'); 
+        distInfo.textContent=`Distance: ${(total/1000).toFixed(1)} km | left: 0 km`; 
+        goBtn.disabled=false; 
+        goBtn.textContent='Go'; 
+        isPlaying=false; 
+        if (animFrame) {
+          cancelAnimationFrame(animFrame);
+          animFrame = null;
+        }
+        nav=null; 
+        currentPosition=0; 
+        return; 
+      }
       prog=Math.max(0,Math.min(1,prog)); const lat=interp(segStart.lat,segEnd.lat,prog), lon=interp(segStart.lng,segEnd.lng,prog); nav.setLatLng([lat,lon]); map.panTo([lat,lon],{animate:false}); liveCoord.textContent=`${lat.toFixed(5)}, ${lon.toFixed(5)}`; console.log('Coord',lat,lon);
       const now=traveled+segDist*prog; 
       if(ts-lastSpeedUpdate>1000) {
