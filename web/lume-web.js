@@ -120,10 +120,15 @@
   };
 
   /* ---------- Animation ---------- */
-  function animate(){ const speed=20.8; let idx=0, segStart=latlngs[0], segEnd=latlngs[1]; let segDist=segStart.distanceTo(segEnd), segDur=segDist/speed; let segTS=null, traveled=0, lastUI=0, lastSpeedUpdate=0, currentSpeed=0;
+  function animate(){ 
+    const speed=20.8; 
+    let idx=0, segStart=latlngs[0], segEnd=latlngs[1]; 
+    let segDist=segStart.distanceTo(segEnd), segDur=segDist/speed; 
+    let segTS=null, traveled=0, lastUI=0, lastSpeedUpdate=0, currentSpeed=0;
+    
     function frame(ts){ 
       if (!isPlaying) {
-        currentPosition = traveled + segDist * Math.max(0, Math.min(1, (ts-segTS)/1000/segDur));
+        cancelAnimationFrame(animFrame);
         return;
       }
       if(segTS===null) segTS=ts; let prog=(ts-segTS)/1000/segDur; while(prog>=1 && idx<latlngs.length-2){ traveled+=segDist; idx++; segStart=latlngs[idx]; segEnd=latlngs[idx+1]; segDist=segStart.distanceTo(segEnd); segDur=segDist/speed; segTS+=segDur*1000; prog=(ts-segTS)/1000/segDur; }
