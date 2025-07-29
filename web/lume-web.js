@@ -108,10 +108,6 @@
           isPlaying = true;
           animate();
         }, 1500);
-      } else {
-        isPlaying = true;
-        animate();
-      }
     } else {
       isPlaying = true;
       animate();
